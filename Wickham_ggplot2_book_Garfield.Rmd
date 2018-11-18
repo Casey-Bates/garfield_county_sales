@@ -1,0 +1,339 @@
+---
+title: "ggplot2 Book Data Viz thru Chapter 3"
+author: "Casey Bates"
+date: "11/3/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Import cleaned dataset.
+```{r, message=FALSE}
+library(tidyverse)
+garfield_df <- read_csv("garfield_no_zeros_clean.csv")
+```
+Basic bar chart of sales by location:
+```{r}
+ggplot(garfield_df, aes(Location)) + 
+  geom_bar()
+```
+
+```{r}
+ggplot(garfield_df, aes(Location, fill = Classification,)) + 
+  geom_bar()
+```
+For a continuous variable, you also need to group by that variable
+```{r}
+ggplot(garfield_df, aes(Location, fill = Sale_Price, group = Sale_Price)) + 
+  geom_bar()
+```
+
+
+Histogram of sales by sale price:
+```{r}
+ggplot(garfield_df, aes(Sale_Price)) +
+  geom_histogram(binwidth = 10000)
+```
+
+```{r}
+ggplot(garfield_df, aes(Sale_Price)) +
+  geom_freqpoly(binwidth = 10000)
+```
+
+```{r}
+ggplot(garfield_df, aes(Sale_Price, color = Location)) +
+  geom_freqpoly(binwidth = 10000)
+```
+
+
+```{r}
+ggplot(garfield_df, aes(Sale_Price)) +
+  geom_histogram(binwidth = 25000)
+```
+Square footage
+```{r}
+ggplot(garfield_df, aes(Square_Feet)) +
+  geom_histogram(binwidth = 100)
+```
+
+```{r}
+ggplot(garfield_df, aes(Square_Feet)) +
+  geom_freqpoly(binwidth = 100)
+```
+
+
+```{r}
+ggplot(garfield_df, aes(Square_Feet)) +
+  geom_histogram(binwidth = 50)
+```
+
+```{r}
+ggplot(garfield_df, aes(Square_Feet)) +
+  geom_freqpoly(binwidth = 50)
+```
+
+```{r}
+ggplot(garfield_df, aes(Sale_Date)) +
+  geom_histogram(bins = 104) # Number of weeks of data in the dataset
+```
+
+```{r}
+ggplot(garfield_df, aes(Sale_Date)) +
+  geom_freqpoly(bins = 104) # Number of weeks of data in the dataset
+```
+
+Scatterplot
+```{r}
+ggplot(garfield_df, aes(Square_Feet, Sale_Price, color = Location)) +
+  geom_point(alpha = 0.5)
+```
+
+```{r}
+ggplot(garfield_df, aes(Square_Feet, Sale_Price)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth()
+```
+
+
+```{r}
+ggplot(garfield_df, aes(Square_Feet, Sale_Price, color = Location)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth()
+```
+
+```{r}
+ggplot(garfield_df, aes(Square_Feet, Sale_Price, color = Location)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(span = 0.5)
+```
+
+
+```{r}
+ggplot(garfield_df, aes(Square_Feet, Sale_Price, color = Location)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm")
+```
+
+```{r}
+ggplot(garfield_df, aes(Square_Feet, Sale_Price, color = Location)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ Location)
+```
+
+```{r}
+ggplot(garfield_df, aes(Square_Feet, Sale_Price, color = Location)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ Classification)
+```
+
+```{r}
+ggplot(garfield_df, aes(Location, Sale_Price, color=Classification)) +
+  geom_jitter(alpha = 0.5)
+```
+
+```{r}
+ggplot(garfield_df, aes(Location, Sale_Price)) +
+  geom_boxplot()
+```
+
+```{r}
+ggplot(garfield_df, aes(Location, Sale_Price)) +
+  geom_point() +
+  geom_boxplot()
+```
+Re-order boxplots by median sale price
+```{r}
+ggplot(garfield_df, aes(x = reorder(Location, Sale_Price, fun = median), y = Sale_Price, fill = Location)) +
+  geom_boxplot()
+```
+
+
+```{r}
+ggplot(garfield_df, aes(Location, Sale_Price)) +
+  geom_violin()
+```
+
+```{r}
+ggplot(garfield_df, aes(Architectural_Style)) + 
+  geom_bar()
+```
+
+```{r}
+qplot(Sale_Date, data = garfield_df)
+```
+
+```{r}
+qplot(Sale_Date, Sale_Price, data = garfield_df)
+```
+
+```{r}
+qplot(Square_Feet, Sale_Price, data = garfield_df)
+```
+
+```{r}
+ggplot(garfield_df, aes(Square_Feet, Sale_Price, fill = Location, color = Location)) +
+  geom_polygon(alpha = 0.3)
+```
+
+```{r}
+ggplot(garfield_df, aes(Square_Feet, Sale_Price)) +
+  geom_area()
+```
+
+```{r}
+ggplot(garfield_df, aes(Square_Feet, Sale_Price)) +
+  geom_text(aes(label = Location), check_overlap = TRUE)
+```
+
+```{r}
+ggplot(garfield_df, aes(Square_Feet, Sale_Price, color = Location)) +
+  geom_point(show.legend = FALSE) + 
+  directlabels::geom_dl(aes(label = Location), method = "smart.grid")
+```
+A little surprised by the placement of the New Castle label.
+
+```{r}
+ggplot(garfield_df, aes(Year_Built, color = Location)) +
+  geom_freqpoly()
+```
+
+```{r}
+ggplot(garfield_df, aes(Year_Built, color = Location)) +
+  geom_freqpoly(binwidth = 2)
+```
+
+```{r}
+ggplot(garfield_df, aes(Year_Built, color = Location)) +
+  geom_freqpoly(binwidth = 10)
+```
+
+#3.13 Statistical Summaries
+```{r}
+ggplot(garfield_df, aes(Location, Year_Built)) +
+  geom_bar(stat = "summary_bin", fun.y = mean)
+```
+Really, do all sales have the same mean Year Built?! I'll check this formula on another variable to make sure it's working...
+```{r}
+ggplot(garfield_df, aes(Location, Sale_Price)) +
+  geom_bar(stat = "summary_bin", fun.y = mean)
+```
+It looks like it's working. Strange.
+```{r}
+ggplot(garfield_df, aes(Location, Square_Feet)) +
+  geom_bar(stat = "summary_bin", fun.y = mean)
+```
+Max sale price...
+```{r}
+ggplot(garfield_df, aes(Location, Sale_Price)) +
+  geom_bar(stat = "summary_bin", fun.y = max)
+```
+Standard deviation...
+```{r}
+ggplot(garfield_df, aes(Location, Sale_Price)) +
+  geom_bar(stat = "summary_bin", fun.y = sd)
+```
+2d summary plot attempt
+```{r}
+ggplot(garfield_df, aes(Square_Feet, Year_Built, z = Sale_Price)) +
+  geom_raster(binwidth = 10, stat = "summary_2d", fun = mean, na.rm = TRUE)
+```
+What if we divide square feet by 10 to get bins of the same size
+```{r}
+ggplot(garfield_df, aes(Square_Feet/10, Year_Built, z = Sale_Price)) +
+  geom_raster(binwidth = 10, stat = "summary_2d", fun = mean, na.rm = TRUE)
+```
+Maybe try something less spread out along the x axis
+```{r}
+ggplot(garfield_df, aes(Bedrooms, Baths, z = Sale_Price)) +
+  geom_raster(binwidth = 0.25, stat = "summary_2d", fun = mean, na.rm = TRUE) #Baths listed in 0.25 increments
+```
+Documentation says that geom_raster is a "high performance special case for when all the tiles are the same size". Here's the above with a binwidth = 1 (to match bedrooms)
+```{r}
+ggplot(garfield_df, aes(Bedrooms, Baths, z = Sale_Price)) +
+  geom_raster(binwidth = 1, stat = "summary_2d", fun = mean, na.rm = TRUE) 
+```
+Here's the same in geom_bin2d at binwidth of 0.25. This provides a count.
+```{r}
+ggplot(garfield_df, aes(Bedrooms, Baths)) +
+  geom_bin2d(binwidth = 0.25, na.rm = TRUE)
+```
+Here is binwidth = 1
+```{r}
+ggplot(garfield_df, aes(Bedrooms, Baths)) +
+  geom_bin2d(binwidth = 1, na.rm = TRUE)
+```
+
+```{r}
+ggplot(garfield_df, aes(Bedrooms, Baths, z = Sale_Price)) +
+  geom_bin2d(binwidth = 1, na.rm = TRUE, stat = "summary_2d", fun = mean,)
+```
+Which appears nearly identical to the raster created earlier, very subtle differences in shading possible.
+```{r}
+ggplot(garfield_df, aes(Bedrooms, Baths, z = Sale_Price)) +
+  geom_raster(binwidth = 1, stat = "summary_2d", fun = mean, na.rm = TRUE)
+```
+
+```{r}
+library(hexbin)
+ggplot(garfield_df, aes(Bedrooms, Baths, z = Sale_Price)) +
+  geom_hex(binwidth = 1, stat = "summary_2d", fun = mean, na.rm = TRUE)
+```
+
+```{r}
+ggplot(garfield_df, aes(Bedrooms, Baths, z = Sale_Price)) +
+  geom_hex(binwidth = 0.25, stat = "summary_2d", fun = mean, na.rm = TRUE)
+```
+
+```{r}
+ggplot(garfield_df, aes(Bedrooms, Baths)) +
+  geom_hex()
+```
+
+#3.11 Displaying Distributions
+```{r}
+ggplot(garfield_df, aes(Baths)) +
+  geom_freqpoly(aes(color = Location), na.rm = TRUE) +
+  theme(legend.position = "none")
+```
+
+```{r}
+ggplot(garfield_df, aes(Baths)) +
+  geom_histogram(aes(fill = Location), binwidth = 0.25, position = "fill", na.rm = TRUE) + #Binwidth to match baths increment
+  theme(legend.position = "none")
+```
+
+```{r}
+ggplot(garfield_df, aes(Sale_Price)) +
+  geom_histogram(aes(fill = Location), binwidth = 50000, position = "fill", na.rm = TRUE) + #Looked at multiple bin widths
+  theme(legend.position = "none")
+```
+
+```{r}
+ggplot(garfield_df, aes(Sale_Price)) +
+  geom_density(na.rm = TRUE) + 
+  theme(legend.position = "none")
+```
+
+```{r}
+ggplot(garfield_df, aes(Sale_Price, fill = Location, color = Location)) +
+  geom_density(alpha = 0.2, na.rm = TRUE) + 
+  theme(legend.position = "none")
+```
+We know Carbondale has the expensive listings, so narrowing the xlim
+```{r}
+ggplot(garfield_df, aes(Sale_Price, fill = Location, color = Location)) +
+  geom_density(alpha = 0.2, na.rm = TRUE) +
+  xlim(NA, 1500000) + 
+  theme(legend.position = "none")
+```
+And again...
+```{r}
+ggplot(garfield_df, aes(Sale_Price, fill = Location, color = Location)) +
+  geom_density(alpha = 0.2, na.rm = TRUE) +
+  xlim(NA, 1000000) + 
+  theme(legend.position = "bottom")
+```
+

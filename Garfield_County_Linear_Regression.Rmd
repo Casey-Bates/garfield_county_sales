@@ -1,0 +1,504 @@
+---
+title: "Garfield County Home Sales 2014 - 2016"
+author: "Casey Bates"
+date: "10/27/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Read in combined dataset that was cleaned in Python. Shortcut for assignment operator: option + minus. Shortcut for pipe operator: shift + command + M
+```{r, message=FALSE}
+library(tidyverse)
+garfield_county_data <- read_csv("garfield_county_combined.csv")
+glimpse(garfield_county_data)
+```
+Give name to index column:
+```{r}
+#I'm not sure why dplyr rename did  not work for this
+new_name <- "Index"
+garfield_county_data <- garfield_county_data %>% dplyr::rename(!! new_name := X1) 
+colnames(garfield_county_data)
+```
+Remove spaces from all column names to avoid problems in R:
+```{r}
+library(magrittr)
+colnames(garfield_county_data) %<>% str_replace_all("\\s", "_")
+colnames(garfield_county_data)
+```
+
+#Linear Regression
+Show linear regression line of Sale Price vs. Square Feet
+```{r}
+ggplot(data = garfield_county_data, aes(x = Square_Feet, y = Sale_Price)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE) #Method set to lm for the linear model
+```
+Explore high sale price observations:
+```{r}
+garfield_county_data %>% arrange(desc(Sale_Price)) %>% select(c("Sale_Price", "Location", "Classification", "Bedrooms", "Square_Feet", "Price_per_SF")) %>% head(30)
+```
+Were there really multiple sales of townhomes in Rifle at $2.2M? Seems suspicious that all sales are identical and on the same date. Will need to read-in the original dataset to find out.
+```{r}
+garfield_county_data %>% filter(Sale_Price == 2200000 & Location == "RIFLE")
+```
+Read-in the original townhome/condo sales dataset.
+```{r}
+garfield_county_condos <- read_csv("2017-comparable-sales-condos-townhomes.csv")
+garfield_county_condos %>% filter(`Sale Price` == "$2,200,000" & Location == "RIFLE")
+```
+Inspecting the data reveals that each sale has a different site address, indicating that perhaps one party purchased the entire block of townhomes. This data will remain in the dataset. Now to create a linear regression model of sale price as a function of square footage
+```{r}
+model <- lm(Sale_Price ~ Square_Feet, data = garfield_county_data)
+```
+Look at the coefficients of the model:
+```{r}
+coef(model)
+```
+Create a coefs tibble for use when manually fitting the regression line:
+```{r}
+coefs <- tibble(
+  `(Intercept)` = 47477.7867,
+  Square_Feet = 174.7282)
+coefs
+```
+A better way to do it would be to extract this information from a tidy version of the summary table:
+```{r}
+library(broom)
+tidy_model <- tidy(model)
+tidy_model
+```
+
+Look at the full output of the model:
+```{r}
+summary(model)
+```
+From DataCamp: One way to assess strength of fit is to consider how far off the model is for a typical case. That is, for some observations, the fitted value will be very close to the actual value, while for others it will not. The magnitude of a typical residual can give us a sense of generally how close our estimates are.
+
+The adjusted r-squared value of only 0.231 indicates that square footage alone does not explain sale price. This value is the proportion of the variance explained by our model (, so only about 23%).
+
+From DataCamp: The least squares fitting procedure guarantees that the mean of the residuals is zero (n.b., numerical instability may result in the computed values not being exactly zero). At the same time, the mean of the fitted values must equal the mean of the response variable.
+
+In this exercise, we will confirm these two mathematical facts by accessing the fitted values and residuals with the fitted.values() and residuals() functions, respectively, for the following model:
+```{r}
+mean(garfield_county_data$Sale_Price) == mean(fitted.values(model))
+```
+This value should be near zero:
+```{r}
+mean(residuals(model))
+```
+From DataCamp: However, recall that some of the residuals are positive, while others are negative. In fact, it is guaranteed by the least squares fitting procedure that the mean of the residuals is zero. Thus, it makes more sense to compute the square root of the mean squared residual, or root mean squared error (RMSE). R calls this quantity the residual standard error.
+
+To make this estimate unbiased, you have to divide the sum of the squared residuals by the degrees of freedom in the model. 
+
+You can recover the residuals from mod with `residuals()`, and the degrees of freedom with `df.residual()`.
+```{r}
+# Compute RMSE
+sqrt(sum(residuals(model)^2) / df.residual(model))
+```
+SSE null model, with the constant 1 inserted as the explanatory variable (line is flat on y-hat intercept, the mean value of y).
+```{r}
+model_null <- lm(Sale_Price ~ 1, data = garfield_county_data)
+SST <- model_null %>% 
+  augment(garfield_county_data) %>% 
+  summarize(SST = sum(.resid^2))
+SST
+```
+Calculate SSE:
+```{r}
+SSE <- model %>% 
+  augment() %>% 
+  summarize(SSE = sum(.resid^2))
+SSE
+```
+The ratio of the SSE for our model, to the SSE for the null model is a quantification of the variability explained by our model. SST = Total sum of the squares. A measure of variability in the response variable. The portion that is not explained by our model is the SSE. So this is r-squared, which is the proportion of the variability in the response variable that is explained by our model. Most commonly cited measure of the quality of fit of the regression model. 
+
+Calculate r-squared as 1 minus SSE/SST
+```{r}
+1 - 1.621836e+14/2.110045e+14
+```
+Or using the object names:
+```{r}
+1 - SSE/SST
+```
+The above calculation matches the r-squared value from the model.
+
+Add a regression line manually (for the sake of practice):
+```{r}
+ggplot(data = garfield_county_data, aes(x = Square_Feet, y = Sale_Price)) + 
+  geom_point() + 
+  geom_abline(data = coefs, 
+              aes(intercept = `(Intercept)`, slope = Square_Feet),  
+              color = "dodgerblue")
+```
+
+Create a new data frame called garfield_county_tidy that is the augmentation of the model linear model. The garfield_data_tidy data frame is the result of augment()-ing the garfield_county_data data frame with the model for Sale_Price as a function of Square_Feet.
+```{r}
+library(broom)
+garfield_data_tidy <- augment(model)
+glimpse(garfield_data_tidy)
+```
+DataCamp instructions: Use the garfield_data_tidy data frame to compute the R2 of model manually using the formula above, by computing the ratio of the variance of the residuals to the variance of the response variable.
+```{r}
+# Compute R-squared
+garfield_data_tidy %>%
+  summarize(var_y = var(Sale_Price), var_e = var(.resid)) %>%
+  mutate(R_squared = 1 - var_e/var_y)
+```
+So, 23 percent of the variability in Sale Price can be explained by Square Footage.
+
+#
+
+Now looking to see how r-squared changes when adding a second variable, in this case it's location.
+```{r}
+model2 <- lm(Sale_Price ~ Square_Feet + Location, data = garfield_county_data)
+summary(model2)
+```
+Unfortunately the dataset does not include any information about lot size/acreage. Next step is to look at how the model responds to removing property sales that included no bedrooms, no bathrooms, or no square footage. Any of these variables with a value of zero likely indicate that it was primarily a land sale, which we are not interested in for the purpose of home inspections. For reference, the original dataset had 1,966 observations.
+```{r}
+no_zeros <- garfield_county_data %>% filter(Bedrooms > 0 & Baths > 0 & Square_Feet > 0)
+glimpse(no_zeros)
+```
+The filter above only removed 7 observations. Probably not enough to make a significant difference.
+```{r}
+model3 <- lm(Sale_Price ~ Square_Feet, data = no_zeros)
+summary(model3)
+```
+
+#Linear regression of Square_Feet vs. Sale_Price for each of the six locations
+First thing we need to do is split up the dataframe into one dataset for each location. We will do this with the no_zeros dataframe. We will nest by location where we end up with a dataframe with one row for each Location where each row in the `data` column is a dataframe of all other columns besides country. This is a list column containing dataframes.
+```{r}
+# Step 1: Nest by location
+library(tidyr)
+no_zeros_nested <- no_zeros %>% 
+  nest(-Location)
+no_zeros_nested
+```
+Check this by printing the data nested for New Castle
+```{r}
+no_zeros_nested$data[[3]]
+```
+If we want to unnest the nested we can do it like this:
+```{r}
+unnest(no_zeros_nested)
+```
+Next, use `purrr()` to fit a linear model for each item in a list column. In particular, the `map()` function. `map()` applies an operation to each item in a list. `mutate()` will be used to define the new column "models". The `map()` function will use information from the "data" column created by the `nest()` function to apply a linear regression to each item of "data".  
+```{r}
+# Step 2: Use `map()` to fit a linear model to each dataset
+library(purrr)
+no_zeros_models <- no_zeros %>%
+  nest(-Location) %>% 
+  mutate(models = map(data, ~lm(Sale_Price ~ Square_Feet, .))) #data has been passed in to lm through map, so dot "." is used for data in the lm call
+head(no_zeros_models)
+```
+Next, the broom package will be used to map each item to a tidy dataframe of coefficients. `tidy()` turns each model into a dataframe. 
+```{r}
+# Step 3: use `map()` to tidy each model
+no_zeros_models <- no_zeros %>%
+  nest(-Location) %>% 
+  mutate(models = map(data, ~lm(Sale_Price ~ Square_Feet, .))) %>% 
+  mutate(tidied = map(models, tidy))
+head(no_zeros_models)
+```
+Now there are three list columns. So now for each location we have three columns: one with the original data, one with the linear models, and one with a dataframe of tidied coefficients. Tidied versions of statistical models are easy to combine. So now we can use `unnest()` to bring them all into the top level by unnesting the tidied column. Now we have a tidy model for each location.
+```{r}
+# Step 4: Unnest to a tidy table of coefficients
+location_coefficients <- no_zeros %>%
+  nest(-Location) %>% 
+  mutate(models = map(data, ~lm(Sale_Price ~ Square_Feet, .))) %>% 
+  mutate(tidied = map(models, tidy)) %>% 
+  unnest(tidied)
+head(location_coefficients)
+```
+To recap, this was 4 steps:
+1. Nest by location
+2. Map to fit a model to each data set
+3. Map to tidy each model
+4. Unnest to a table of coefficients
+
+Now, since the data is tidy, we can manipulate it with dplyr functions. For this exercise, we are interested in how square footage predicts sale price (the slope), not where sale price started (the intercept). So we will filter for term == Square_Feet.
+```{r}
+location_slopes <-  location_coefficients %>% 
+  filter(term == "Square_Feet")
+location_slopes
+```
+But we will want the intercept to practice manually drawing the regression lines.
+```{r}
+location_intercept <-  location_coefficients %>% 
+  filter(term == ("(Intercept)"))
+location_intercept
+```
+From DataCamp: not all of these slopes can be trusted. Some can be due to random noise. We may want to only get the models that are statistically significant, which would mean that Rifle would be excluded. The p-value for the model is a common metric for whether it was due to noise. A p-value of less than 0.05 is generally the threshold for calling a trend significant.
+
+A common issue with p-values is that when we run many statistical tests and evaluate their p-values we need to do a multiple hypothesis correction. The basic issue is that if you try many tests, some might be less than 0.05 by chance, meaning we need to be more restrictive. R provides a function called `p.adjust()` to make this correction. Rather than filter anything out at this point, I will create a new column of p.adjusted values. Also, the dataset will be arranged by estimate.
+```{r}
+location_slopes <-  location_coefficients %>% 
+  filter(term == "Square_Feet") %>% 
+  mutate(p.adjusted = p.adjust(p.value)) %>% 
+  arrange(estimate)
+location_slopes
+```
+Based on the results, it looks like the next step will be to investigate what is going on with the Rifle dataset. 
+
+#Visualizing multiple linear regression models
+Visualization of the linear regression models of Square_Feet vs. Sale_Price for each location can be completed one of two ways with ggplot. The first is the "lm" method within `geom_smooth()`. 
+```{r}
+ggplot(data = no_zeros, aes(x = Square_Feet, y = Sale_Price)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~ Location)
+```
+
+#Many models with purrr and broom R4DS approach to this dataset (Chapter 20)
+The models capture how square feet influences sale price, and the residuals show what's left.
+```{r}
+library(modelr)
+glenwood <- filter(no_zeros, Location == "GLENWOOD")
+glenwood %>% 
+  ggplot(aes(Square_Feet, Sale_Price)) + 
+  geom_line() +
+  ggtitle("Full data = ")
+
+glenwood_mod <- lm(Sale_Price ~ Square_Feet, data = glenwood)
+glenwood %>% 
+  add_predictions(glenwood_mod) %>% 
+  ggplot(aes(Square_Feet, pred)) +
+  geom_line() +
+  ggtitle("Linear trend + ")
+
+glenwood %>% 
+  add_residuals(glenwood_mod) %>% 
+  ggplot(aes(Square_Feet, resid)) +
+  geom_hline(yintercept = 0, color = "white", size = 3) +
+  geom_line() +
+  ggtitle("Remaining pattern")
+```
+
+To repeat the above for all six locations, we will need to create a nested dataframe to repeat this action for each location using purrr. We've seen how to do this above, but now we will try the approach outlined by Hadley Wickam.
+```{r}
+by_location <- no_zeros %>% 
+  group_by(Location) %>% 
+  nest()
+by_location
+
+# Equivalent method outlined by David Robinson used above would be:
+#by_location <- no_zeros %>% 
+  #nest(-Location)
+```
+According to Wickam, there is no great way to explore the nested dataframes. So the best thing we can do is inspect one of them:
+```{r}
+by_location$data[[4]] #Parachute
+```
+Now that we have our nested dataframe we're in a good position to fit some models. Here is the model fitting function:
+```{r}
+location_model <- function(df){
+  lm(Sale_Price ~ Square_Feet, data = df)
+}
+```
+And we want to apply it to every data frame. The dataframes are in a list, so we can use purrrr::map() to apply location_model to each element:
+```{r}
+# models <- map(by_location$data, location_model)
+```
+However, rather than leaving the list of models as a free-floating element (as stated by Wickam) it's better to store this information as a column in the by_location dataframe.
+```{r}
+by_location <- by_location %>% 
+  mutate(model = map(data, location_model))
+by_location
+```
+The above is a similar approach to that taught by David Robinson except that Wickam abstracted away the linear modeling by creating the location_model function first.
+
+Wickam: This has a big advantage: because all the related objects are stored together, you don't need to manually keep them in sync when you filter or arrange. The semantics of the dataframe take care of that for you:
+```{r}
+by_location %>% 
+  filter(Location == "SILT")
+```
+Or arrange:
+```{r}
+by_location %>% 
+  arrange(Location)
+```
+Keeping everything in one place keeps you from reordering or subsetting objects in different ways!
+
+To compute the residuals for all dataframes we will call add_residuals() with each model-data pair:
+```{r}
+by_location <- by_location %>% 
+  mutate(
+    resids = map2(data, model, add_residuals)
+  )
+by_location
+```
+Now to inspect one of the resids dataframes:
+```{r}
+head(by_location$resids[[2]])
+```
+How can you plot a list of dataframes? If we want to plot the residuals we will need to unnest this list of dataframes, like so:
+```{r}
+resids <- unnest(by_location, resids)
+resids
+```
+Wickam: Each regular column is repeated once for each row in the nested column. Now that we have a regular dataframe we can plot the residuals:
+```{r}
+resids %>% 
+  ggplot(aes(Square_Feet, resid)) +
+  geom_line(aes(group = Location, color=Location), alpha = 1 / 3) +
+  geom_smooth(se = FALSE)
+```
+Or, facet by location:
+```{r}
+resids %>% 
+  ggplot(aes(Square_Feet, resid, color = Location)) +
+  geom_line(alpha = 1 / 3) +
+  facet_wrap(~Location)
+```
+Based on the figure above, the models for Carbondale and Rifle deserve a closer look.
+
+#Model Quality
+Wickam: Instead of looking at residuals from the model we could look at some general measurements of model quality using broom::glance(). If we apply it to a model, we get a dataframe with a single row.
+```{r}
+broom::glance(glenwood_mod)
+```
+We can use `mutate()` and `unnest()` to create a dataframe with a row for each location:
+```{r}
+by_location %>% 
+  mutate(glance = map(model, broom::glance)) %>% 
+  unnest(glance)
+```
+This still includes the list columns. This is the default behavior when `unnest()` works on single-row dataframes. To supress these columns we use .drop = TRUE:
+```{r}
+glance <- by_location %>% 
+  mutate(glance = map(model, broom::glance)) %>% 
+  unnest(glance, .drop = TRUE)
+glance
+```
+Now we can look for models that don't fit well:
+```{r}
+glance %>% 
+  arrange(r.squared)
+```
+As seen earlier, the model is particularly poor for Rifle. Not super useful to plot this small group but...
+```{r}
+glance %>% 
+  ggplot(aes(Location, r.squared)) +
+  geom_point()
+```
+
+#Creating a training and test set to compare model results.
+To compare model quality I will create a training and test set as per this [method](https://rpubs.com/ID_Tech/S1).
+```{r}
+smp_siz <-  floor(0.8*nrow(no_zeros))  # creates a value for dividing the data into train and test. In this case the value is defined as 80% of the number of rows in the dataset
+smp_siz  # shows the value of the sample size
+```
+
+```{r}
+set.seed(123)   # set seed to ensure you always have same random numbers generated
+train_ind <-  sample(seq_len(nrow(no_zeros)),size = smp_siz)  # Randomly identifies therows equal to sample size ( defined in previous instruction) from  all the rows of no_zeros dataset and stores the row number in train_ind
+train <- no_zeros[train_ind,] #creates the training dataset with row numbers stored in train_ind
+test <- no_zeros[-train_ind,] # creates the test dataset excluding the row numbers mentioned in train_ind
+```
+I'll start with some visualizations comparing the two datasets.
+```{r}
+#Training dataset
+ggplot(data = train, aes(x = Square_Feet, y = Sale_Price)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~ Location)
+```
+And the test dataset:
+```{r}
+#Test dataset
+ggplot(data = test, aes(x = Square_Feet, y = Sale_Price)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~ Location)
+```
+Now to compare the modeling coefficients of each using David Robinson's 4 step approach.
+```{r}
+# David Robinson's Steps 1 thru 4 on training dataset
+train_coefficients <- train %>%
+  nest(-Location) %>% 
+  mutate(models = map(data, ~lm(Sale_Price ~ Square_Feet, .))) %>% 
+  mutate(tidied = map(models, tidy)) %>% 
+  unnest(tidied)
+#Filter for slope values for each location and arrange
+train_coefficients %>% filter(term=="Square_Feet") %>% arrange(estimate)
+```
+
+```{r}
+# David Robinson's Steps 1 thru 4 on test dataset
+test_coefficients <- test %>%
+  nest(-Location) %>% 
+  mutate(models = map(data, ~lm(Sale_Price ~ Square_Feet, .))) %>% 
+  mutate(tidied = map(models, tidy)) %>% 
+  unnest(tidied)
+#Filter for slope values for each location and arrange
+test_coefficients %>% filter(term=="Square_Feet") %>% arrange(estimate)
+```
+Overall the results look reasonably close between the training set and the test set. What about using the approach above with `broom::glance()` instead of `broom::tidy()`? The approach below combines David Robinson's 4-step approach with the `broom::glance()` example described by Wickam.
+```{r}
+train_glance <- train %>%
+  nest(-Location) %>% 
+  mutate(models = map(data, ~lm(Sale_Price ~ Square_Feet, .))) %>% 
+  mutate(glance = map(models, broom::glance)) %>% 
+  unnest(glance, .drop = TRUE)
+train_glance%>% arrange(r.squared)
+```
+In the results above you can see that everything is already arranged by r.squared, lowest to highest. The model fits very poorly for Rifle.
+
+```{r}
+test_glance <- test %>%
+  nest(-Location) %>% 
+  mutate(models = map(data, ~lm(Sale_Price ~ Square_Feet, .))) %>% 
+  mutate(glance = map(models, broom::glance)) %>% 
+  unnest(glance, .drop = TRUE)
+test_glance %>% arrange(r.squared)
+```
+What about augment? Can we apply the 4-step process to this too?
+```{r}
+train_augment <- train %>%
+  nest(-Location) %>% 
+  mutate(models = map(data, ~lm(Sale_Price ~ Square_Feet, .))) %>% 
+  mutate(augment = map(models, broom::augment)) %>% 
+  unnest(augment)
+train_augment
+```
+What about augment? Can we apply the 4-step process to this too?
+```{r}
+test_augment <- test %>%
+  nest(-Location) %>% 
+  mutate(models = map(data, ~lm(Sale_Price ~ Square_Feet, .))) %>% 
+  mutate(augment = map(models, broom::augment)) %>% 
+  unnest(augment)
+test_augment
+```
+
+#Using a Robust Linear Model (MASS package)
+From Wickham ggplor2 book Chapter 2.6.1. The MASS package offers a robust fitting algorithm so that outliers don't affect the fit as much.
+
+NOTE: You can't load MASS package before any dplyr::select() calls appear in the code because the dplyr::select() is masked by the MASS package and does not work on subsequent code.
+```{r}
+#Training dataset modeled with robust linear model
+library(MASS)
+ggplot(data = train, aes(x = Square_Feet, y = Sale_Price)) + 
+  geom_point() + 
+  geom_smooth(method = "rlm", se = FALSE) +
+  facet_wrap(~ Location)
+```
+
+And looking at the test dataset:
+```{r}
+#Test dataset
+ggplot(data = test, aes(x = Square_Feet, y = Sale_Price)) + 
+  geom_point() + 
+  geom_smooth(method = "rlm", se = FALSE) + #rlm from MASS package
+  facet_wrap(~ Location)
+```
+
+Write the no_zeros file to csv to open in different file to remove outliers from Rifle (it appears multiple condos sold at one time for 2.2M total, but were recorded as 2.2M each). 
+```{r}
+write_csv(no_zeros, "garfield_no_zeros.csv")
+```
+
+
+
+

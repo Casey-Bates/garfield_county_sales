@@ -1,0 +1,284 @@
+---
+title: "Garfield County Home Sales 2014 - 2016"
+author: "Casey Bates"
+date: "10/27/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Read in combined dataset that was cleaned in Python. Shortcut for assignment operator: option + minus. Shortcut for pipe operator: shift + command + M
+```{r, message=FALSE}
+library(tidyverse)
+garfield_county_data <- read_csv("garfield_county_combined.csv")
+glimpse(garfield_county_data)
+```
+Give name to index column:
+```{r}
+#I'm not sure why dplyr rename did  not work for this
+new_name <- "Index"
+garfield_county_data <- garfield_county_data %>% dplyr::rename(!! new_name := X1) 
+colnames(garfield_county_data)
+```
+Remove spaces from all column names to avoid problems in R:
+```{r}
+library(magrittr)
+colnames(garfield_county_data) %<>% str_replace_all("\\s", "_")
+colnames(garfield_county_data)
+```
+
+#Linear Regression
+Show linear regression line of Sale Price vs. Square Feet
+```{r}
+ggplot(data = garfield_county_data, aes(x = Square_Feet, y = Sale_Price)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE) #Method set to lm for the linear model
+```
+Explore high sale price observations:
+```{r}
+garfield_county_data %>% arrange(desc(Sale_Price)) %>% select(c("Sale_Price", "Location", "Classification", "Bedrooms", "Square_Feet", "Price_per_SF")) %>% head(30)
+```
+Were there really multiple sales of townhomes in Rifle at $2.2M? Seems suspicious that all sales are identical and on the same date. Will need to read-in the original dataset to find out.
+```{r}
+garfield_county_data %>% filter(Sale_Price == 2200000 & Location == "RIFLE")
+```
+Read-in the original townhome/condo sales dataset.
+```{r}
+garfield_county_condos <- read_csv("2017-comparable-sales-condos-townhomes.csv")
+garfield_county_condos %>% filter(`Sale Price` == "$2,200,000" & Location == "RIFLE")
+```
+Inspecting the data reveals that each sale has a different site address, indicating that perhaps one party purchased the entire block of condos. This data will remain in the dataset. Now to create a linear regression model of sale price as a function of square footage
+```{r}
+model <- lm(Sale_Price ~ Square_Feet, data = garfield_county_data)
+```
+Look at the coefficients of the model:
+```{r}
+coef(model)
+```
+Create a coefs tibble for use when manually fitting the regression line:
+```{r}
+coefs <- tibble(
+  `(Intercept)` = 47477.7867,
+  Square_Feet = 174.7282)
+coefs
+```
+A better way to do it would be to extract this information from a tidy version of the summary table:
+```{r}
+library(broom)
+tidy_model <- tidy(model)
+tidy_model
+```
+
+Look at the full output of the model:
+```{r}
+summary(model)
+```
+From DataCamp: One way to assess strength of fit is to consider how far off the model is for a typical case. That is, for some observations, the fitted value will be very close to the actual value, while for others it will not. The magnitude of a typical residual can give us a sense of generally how close our estimates are.
+
+The adjusted r-squared value of only 0.231 indicates that square footage alone does not explain sale price. This value is the proportion of the variance explained by our model (, so only about 23%).
+
+From DataCamp: The least squares fitting procedure guarantees that the mean of the residuals is zero (n.b., numerical instability may result in the computed values not being exactly zero). At the same time, the mean of the fitted values must equal the mean of the response variable.
+
+In this exercise, we will confirm these two mathematical facts by accessing the fitted values and residuals with the fitted.values() and residuals() functions, respectively, for the following model:
+```{r}
+mean(garfield_county_data$Sale_Price) == mean(fitted.values(model))
+```
+This value should be near zero:
+```{r}
+mean(residuals(model))
+```
+From DataCamp: However, recall that some of the residuals are positive, while others are negative. In fact, it is guaranteed by the least squares fitting procedure that the mean of the residuals is zero. Thus, it makes more sense to compute the square root of the mean squared residual, or root mean squared error (RMSE). R calls this quantity the residual standard error.
+
+To make this estimate unbiased, you have to divide the sum of the squared residuals by the degrees of freedom in the model. 
+
+You can recover the residuals from mod with `residuals()`, and the degrees of freedom with `df.residual()`.
+```{r}
+# Compute RMSE
+sqrt(sum(residuals(model)^2) / df.residual(model))
+```
+SSE null model, with the constant 1 inserted as the explanatory variable (line is flat on y-hat intercept, the mean value of y).
+```{r}
+model_null <- lm(Sale_Price ~ 1, data = garfield_county_data)
+SST <- model_null %>% 
+  augment(garfield_county_data) %>% 
+  summarize(SST = sum(.resid^2))
+SST
+```
+Calculate SSE:
+```{r}
+SSE <- model %>% 
+  augment() %>% 
+  summarize(SSE = sum(.resid^2))
+SSE
+```
+The ratio of the SSE for our model, to the SSE for the null model is a quantification of the variability explained by our model. SST = Total sum of the squares. A measure of variability in the response variable. The portion that is not explained by our model is the SSE. So this is r-squared, which is the proportion of the variability in the response variable that is explained by our model. Most commonly cited measure of the quality of fit of the regression model. 
+
+Calculate r-squared as 1 minus SSE/SST
+```{r}
+1 - 1.621836e+14/2.110045e+14
+```
+Or using the object names:
+```{r}
+1 - SSE/SST
+```
+The above calculation matches the r-squared value from the model.
+
+Add a regression line manually (for the sake of practice):
+```{r}
+ggplot(data = garfield_county_data, aes(x = Square_Feet, y = Sale_Price)) + 
+  geom_point() + 
+  geom_abline(data = coefs, 
+              aes(intercept = `(Intercept)`, slope = Square_Feet),  
+              color = "dodgerblue")
+```
+
+Create a new data frame called garfield_county_tidy that is the augmentation of the model linear model. The garfield_data_tidy data frame is the result of augment()-ing the garfield_county_data data frame with the model for Sale_Price as a function of Square_Feet.
+```{r}
+library(broom)
+garfield_data_tidy <- augment(model)
+glimpse(garfield_data_tidy)
+```
+DataCamp instructions: Use the garfield_data_tidy data frame to compute the R2 of model manually using the formula above, by computing the ratio of the variance of the residuals to the variance of the response variable.
+```{r}
+# Compute R-squared
+garfield_data_tidy %>%
+  summarize(var_y = var(Sale_Price), var_e = var(.resid)) %>%
+  mutate(R_squared = 1 - var_e/var_y)
+```
+So, 23 percent of the variability in Sale Price can be explained by Square Footage.
+
+Now looking to see how r-squared changes when adding a second variable, in this case it's location.
+```{r}
+model2 <- lm(Sale_Price ~ Square_Feet + Location, data = garfield_county_data)
+summary(model2)
+```
+Unfortunately the dataset does not include any information about lot size/acreage. Next step is to look at how the model responds to removing property sales that included no bedrooms, no bathrooms, or no square footage. Any of these variables with a value of zero likely indicate that it was primarily a land sale, which we are not interested in for the purpose of home inspections. For reference, the original dataset had 1,966 observations.
+```{r}
+no_zeros <- garfield_county_data %>% filter(Bedrooms > 0 & Baths > 0 & Square_Feet > 0)
+glimpse(no_zeros)
+```
+The filter above only removed 7 observations. Probably not enough to make a significant difference.
+```{r}
+model3 <- lm(Sale_Price ~ Square_Feet, data = no_zeros)
+summary(model3)
+```
+
+#EDA: Creating Faceted histograms of numeric data
+Creating faceted histograms of numeric data based on this [link](https://www.r-bloggers.com/quick-plot-of-all-variables/).
+
+From blog post above: `keep()` will take our data frame (as the first argument/via a pipe), and apply a predicate function to each of its columns. Columns that return `TRUE` in the function will be kept, while others will be dropped. In the example above, we saw is.numeric being used as the predicate function (note the necessary absence of parentheses). This means that only numeric columns will be kept, and all others excluded. Let’s see how this works after converting some columns in the mtcars data to factors.
+```{r}
+library(dplyr)
+garfield_county_data %>% 
+  keep(is.numeric) %>% 
+  select(-Count, -Index) %>% #These columns removed because they are not meaningful
+  gather() %>%
+  ggplot(aes(value)) + 
+  facet_wrap(~ key, scales = "free") + 
+  geom_histogram()
+```
+
+```{r}
+garfield_county_data %>% 
+  keep(is.numeric) %>% 
+  select(-Count, -Index) %>% 
+  gather() %>%
+  ggplot(aes(value)) + 
+  facet_wrap(~ key, scales = "free") + 
+  geom_density()
+```
+What does R base's pairs plotting look like?
+```{r}
+garfield_county_data %>% 
+  keep(is.numeric) %>%
+  pairs(garfield_county_data)
+```
+
+Jibberish
+Running ggpairs(garfield_county_data) resulted in an error:
+Error in stop_if_high_cardinality(data, columns, cardinality_threshold) : Column 'Architectural_Style' has more levels (22) than the threshold (15) allowed. Please remove the column or increase the 'cardinality_threshold' parameter. Increasing the cardinality_threshold may produce long processing times
+Starting with only select numeric columns, to try ggpairs():
+```{r}
+library(GGally)
+garfield_county_data %>% 
+  keep(is.numeric) %>%
+  select(-Count, -Index) %>% 
+  ggpairs()
+```
+
+The output above shows blank data in the price per square foot column when printed to rmarkdown.
+```{r}
+library(GGally)
+garfield_county_data %>% 
+  keep(is.numeric) %>%
+  select(-Count, -Index) %>% 
+  ggcorr(label = TRUE)
+```
+
+Also, as seen above the price per square foot column is blank. Checking unique values shows values of "Inf" because the dataset has some zeroes in the square foot column. Next step is to re-try this analysis using the "no_zeroes" dataframe cleaned in the "Linear_Regression_v2 file.
+
+```{r}
+no_zeros <- read_csv("garfield_no_zeros_clean.csv")
+```
+
+
+```{r}
+no_zeros %>% 
+  keep(is.numeric) %>%
+  select(-Count, -Index) %>% 
+  ggpairs()
+```
+
+Looking at the rmarkdown knit html, the output from the code above is much more readable. Next is to re-do the ggcorr() call for the no_zeroes dataframe.
+```{r}
+no_zeros %>% 
+  keep(is.numeric) %>%
+  select(-Count, -Index) %>% 
+  ggcorr(label = TRUE)
+```
+
+Does the base R pairs() do any better with the no_zeroes df with only select numeric columns? Nope.
+```{r}
+no_zeros %>% 
+  keep(is.numeric) %>%
+  select(-Count, -Index) %>% 
+  pairs()
+```
+
+Now to try ggpairs evaluation above, adding in the "Location" and "Classification" columns.
+```{r}
+no_zeros %>% 
+  select(-Count, -Index, -Inspection_Date, -Sale_Date, -Architectural_Style) %>% 
+  ggpairs()
+```
+
+ggcorr() only uses numeric data. So when attempting with the selected columns above, the following message was received:
+"data in column(s) 'Location', 'Classification' are not numeric and were ignored"
+The ggpairs() call above is a bit too loaded. 
+
+Is the correlation between square footage and sale price higher when only looking at condos and townhomes? Are land sales ever classified as condo or townhome? I would assume no. So, for townhomes and condos I would guess that the correlation between square footage and sale price is higher than with all home types combined. 
+```{r}
+no_zeros %>% 
+  filter(Classification != "Single Family") %>%
+  keep(is.numeric) %>%
+  select(-Count, -Index) %>% 
+  ggpairs()
+```
+
+```{r}
+no_zeros %>% 
+  filter(Classification != "Single Family") %>%  
+  keep(is.numeric) %>%
+  select(-Count, -Index) %>% 
+  ggcorr(label = TRUE) #Adding some labels
+```
+
+Interestingly, for condos and townhomes the correlation between square footage and sale price actually decreased. This however is not surprising considering that there were multiple sales of condos in Rifle at a price of $2.2M. Now for a look at a select group of columns incluing a couple of categorical variables (Location and Classification).
+```{r}
+no_zeros %>% 
+  select(Sale_Price, Square_Feet, Location, Classification) %>% 
+  ggpairs()
+```
+
+```
