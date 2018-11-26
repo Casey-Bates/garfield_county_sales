@@ -1,6 +1,6 @@
 ---
 title: "Linear Regression v2"
-author: "Casey Bates"
+author: "Casey J  Bates"
 date: "11/2/2018"
 output: html_document
 ---
